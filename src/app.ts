@@ -23,6 +23,8 @@ import { UPLOAD_DIR } from "@/config/paths";
 export function createApp(): Application {
   const app = express();
 
+  app.set("trust proxy", 1);
+
   // Security & parsing middleware
   app.use(
     helmet({
