@@ -8,10 +8,11 @@ import type { RegisterInput, LoginInput } from "@/modules/auth/auth.validation";
 const REFRESH_COOKIE_NAME = "refreshToken";
 
 function setRefreshCookie(res: Response, token: string) {
+  const isProd = env.NODE_ENV === "production";
   res.cookie(REFRESH_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
     path: "/api/auth",
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 dana
   });
