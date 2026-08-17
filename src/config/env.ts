@@ -36,6 +36,13 @@ const envSchema = z.object({
   CLOUDINARY_CLOUD_NAME: z.string().default(""),
   CLOUDINARY_API_KEY: z.string().default(""),
   CLOUDINARY_API_SECRET: z.string().default(""),
+
+  ENCRYPTION_KEY: z
+    .string()
+    .length(64, "ENCRYPTION_KEY must be 64-characted hex string (32 bytes)"),
+
+  EMAIL_USER: z.string().default(""),
+  EMAIL_APP_PASSWORD: z.string().default(""),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -1,4 +1,10 @@
 import { Schema, model, type Document, type Types } from "mongoose";
+import {
+  encrypt,
+  decrypt,
+  encryptNumber,
+  decryptNumber,
+} from "@/utils/encryption";
 
 export const CONTRACT_STATUSES = [
   "draft",
@@ -12,12 +18,12 @@ export type ContractStatus = (typeof CONTRACT_STATUSES)[number];
 
 export interface ISignatureRecord {
   signedBy: Types.ObjectId;
-  fullName: string; // ime za pravnu evidenciju (i dalje se unosi, uz nacrtan potpis)
-  signatureImageUrl: string; // putanja do PNG fajla sa nacrtanim potpisom
-  ip: string;
+  fullName: string; // ENKRIPTOVANO u bazi, dekriptuje se pri čitanju
+  signaturePublicId: string; // Cloudinary public_id (authenticated tip, ne javan URL)
+  ip: string; // ENKRIPTOVANO u bazi
   userAgent: string;
   timestamp: Date;
-  consentText: string; // tačan tekst saglasnosti koji je korisnik prihvatio
+  consentText: string;
 }
 
 export interface IRevisionRequest {
@@ -33,17 +39,17 @@ export interface IContract extends Document {
   deal?: Types.ObjectId;
   title: string;
   brand: string;
-  bodyText: string; // puni tekst ugovora
+  bodyText: string; // ENKRIPTOVANO u bazi, dekriptuje se pri čitanju
   status: ContractStatus;
-  value: number;
+  value: number; // ENKRIPTOVANO u bazi — dekriptovano na broj kad se čita, konvertuj sa Number() ako je potrebno
   currency: string;
   expiryDate: Date;
   creatorSigned: boolean;
   brandSigned: boolean;
   creatorSignature?: ISignatureRecord;
   brandSignature?: ISignatureRecord;
-  documentHash?: string; // SHA-256 hash bodyText-a u trenutku poslednjeg potpisa — dokazuje da sadržaj nije menjan
-  finalPdfUrl?: string; // putanja do generisanog "Certificate of Completion" PDF-a, popunjava se kad OBE strane potpišu
+  documentHash?: string;
+  finalPdfPublicId?: string; // Cloudinary public_id (authenticated), ne javan URL
   revisionRequests: IRevisionRequest[];
   createdAt: Date;
   updatedAt: Date;
@@ -52,14 +58,24 @@ export interface IContract extends Document {
 const signatureRecordSchema = new Schema<ISignatureRecord>(
   {
     signedBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    fullName: { type: String, required: true },
-    signatureImageUrl: { type: String, required: true },
-    ip: { type: String, required: true },
+    fullName: {
+      type: String,
+      required: true,
+      set: (v: string) => encrypt(v),
+      get: (v: string) => (v ? decrypt(v) : v),
+    },
+    signaturePublicId: { type: String, required: true },
+    ip: {
+      type: String,
+      required: true,
+      set: (v: string) => encrypt(v),
+      get: (v: string) => (v ? decrypt(v) : v),
+    },
     userAgent: { type: String, required: true },
     timestamp: { type: Date, required: true },
     consentText: { type: String, required: true },
   },
-  { _id: false },
+  { _id: false, toJSON: { getters: true }, toObject: { getters: true } },
 );
 
 const contractSchema = new Schema<IContract>(
@@ -93,6 +109,9 @@ const contractSchema = new Schema<IContract>(
     bodyText: {
       type: String,
       required: true,
+      maxlength: 100000, // enkriptovan tekst je duži od originala, limit povećan da ostavi prostora
+      set: (v: string) => encrypt(v),
+      get: (v: string) => (v ? decrypt(v) : v),
     },
     status: {
       type: String,
@@ -100,10 +119,11 @@ const contractSchema = new Schema<IContract>(
       default: "draft",
     },
     value: {
-      type: Number,
+      type: String,
       required: true,
-      min: 0,
-    },
+      set: (v: number) => encryptNumber(v),
+      get: (v: string) => (v ? String(decryptNumber(v)) : v),
+    } as any,
     currency: {
       type: String,
       default: "USD",
@@ -125,7 +145,7 @@ const contractSchema = new Schema<IContract>(
     documentHash: {
       type: String,
     },
-    finalPdfUrl: {
+    finalPdfPublicId: {
       type: String,
     },
     revisionRequests: [
@@ -140,7 +160,7 @@ const contractSchema = new Schema<IContract>(
       },
     ],
   },
-  { timestamps: true },
+  { timestamps: true, toJSON: { getters: true }, toObject: { getters: true } },
 );
 
 export const Contract = model<IContract>("Contract", contractSchema);

@@ -12,6 +12,7 @@ import {
   withdrawContract,
   updateContract,
   deleteContract,
+  getSignedPdfUrl,
 } from "@/modules/contracts/contract.controller";
 import { requireAuth } from "@/middleware/auth.middleware";
 import { requireRole } from "@/middleware/rbac.middleware";
@@ -35,6 +36,7 @@ router.use(auditLog("Contract"));
 router.get("/", getContracts);
 router.get("/sent", requireRole("brand", "agency", "admin"), getSentContracts);
 router.get("/:id", validate(contractParamsSchema), getContract);
+router.get("/:id/pdf-url", validate(contractParamsSchema), getSignedPdfUrl);
 router.post("/", validate(createContractSchema), createContract);
 router.post(
   "/send",

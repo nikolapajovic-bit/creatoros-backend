@@ -28,6 +28,7 @@ function sanitizeUser(user: {
   avatarUrl?: string;
   savedSignatureUrl?: string;
   onboardingCompleted?: boolean;
+  emailVerified?: boolean;
 }) {
   return {
     id: user._id,
@@ -40,6 +41,7 @@ function sanitizeUser(user: {
     hasSavedSignature: !!user.savedSignatureUrl,
     savedSignatureUrl: user.savedSignatureUrl,
     onboardingCompleted: !!user.onboardingCompleted,
+    emailVerified: !!user.emailVerified,
   };
 }
 
@@ -124,5 +126,37 @@ export const removeAvatar = asyncHandler(
       avatarUrl: undefined,
     });
     res.status(200).json({ user: sanitizeUser(user) });
+  },
+);
+
+export const getSavedSignatureUrl = asyncHandler(
+  async (req: Request, res: Response) => {
+    const user = await authService.getCurrentUser(req.user!.id);
+
+    if (!user.savedSignatureUrl || user.savedSignatureUrl.startsWith("http")) {
+      throw new AppError("No valid saved signature found", 404);
+    }
+
+    const { getSignedFileUrl } = await import("@/utils/cloudinaryAccess.js");
+    const url = getSignedFileUrl(user.savedSignatureUrl, "image", 300);
+
+    res.status(200).json({ url });
+  },
+);
+
+export const verifyEmail = asyncHandler(async (req: Request, res: Response) => {
+  const { token } = req.query as { token?: string };
+  if (!token) {
+    throw new AppError("Verification token is required", 400);
+  }
+
+  await authService.verifyEmail(token);
+  res.status(200).json({ message: "Email verified successfully" });
+});
+
+export const resendVerification = asyncHandler(
+  async (req: Request, res: Response) => {
+    await authService.resendVerificationEmail(req.user!.id);
+    res.status(200).json({ message: "Verification email sent" });
   },
 );

@@ -146,27 +146,33 @@ export async function signContract(
     throw new AppError("You have already signed this contract", 400);
   }
 
-  // Odredi koju sliku potpisa koristimo — sačuvanu ili novonacrtanu
-  let signatureImageUrl: string;
+  // Odredi koji public_id potpisa koristimo — sačuvani ili novonacrtani
+  let signaturePublicId: string;
 
   if (input.useSavedSignature) {
-    if (!user.savedSignatureUrl) {
+    if (!user.savedSignatureUrl || user.savedSignatureUrl.startsWith("http")) {
+      // Ocisti zastarelu vrednost (od pre Cloudinary "authenticated" migracije) da se
+      // sledeci put korisniku vise ne nudi opcija "use saved" dok stvarno ne sacuva novu
+      if (user.savedSignatureUrl?.startsWith("http")) {
+        user.savedSignatureUrl = undefined;
+        await user.save();
+      }
       throw new AppError(
-        "You don't have a saved signature. Please draw one.",
+        "Your saved signature is outdated. Please draw a new one.",
         400,
       );
     }
-    signatureImageUrl = user.savedSignatureUrl;
+    signaturePublicId = user.savedSignatureUrl;
   } else {
     if (!input.signatureImage) {
       throw new AppError("Signature is required", 400);
     }
     const uploaded = await saveSignatureImage(input.signatureImage, userId);
-    signatureImageUrl = uploaded.url;
+    signaturePublicId = uploaded.publicId;
 
     // Ako korisnik želi, sačuvaj OVAJ potpis kao njegov podrazumevani za buduće ugovore
     if (input.saveSignatureForFuture) {
-      user.savedSignatureUrl = signatureImageUrl;
+      user.savedSignatureUrl = signaturePublicId;
       await user.save();
     }
   }
@@ -174,7 +180,7 @@ export async function signContract(
   const signatureRecord = {
     signedBy: userId as unknown as typeof contract.creator,
     fullName: input.fullName,
-    signatureImageUrl,
+    signaturePublicId,
     ip: meta.ip,
     userAgent: meta.userAgent,
     timestamp: new Date(),
@@ -195,7 +201,7 @@ export async function signContract(
   if (contract.creatorSigned && contract.brandSigned) {
     contract.status = "signed";
     await contract.save();
-    contract.finalPdfUrl = await generateSignedContractPdf(contract);
+    contract.finalPdfPublicId = await generateSignedContractPdf(contract);
   }
 
   await contract.save();

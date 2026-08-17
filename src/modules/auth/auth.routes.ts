@@ -9,6 +9,9 @@ import {
   changePassword,
   updateAvatar,
   removeAvatar,
+  getSavedSignatureUrl,
+  verifyEmail,
+  resendVerification,
 } from "@/modules/auth/auth.controller";
 import { validate } from "@/middleware/validate";
 import { registerSchema, loginSchema } from "@/modules/auth/auth.validation";
@@ -53,5 +56,8 @@ router.patch(
   validate(changePasswordSchema),
   changePassword,
 );
+router.get("/saved-signature-url", requireAuth, getSavedSignatureUrl);
+router.get("/verify-email", verifyEmail);
+router.post("/resend-verification", requireAuth, resendVerification);
 
 export default router;

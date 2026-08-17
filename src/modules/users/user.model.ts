@@ -22,8 +22,9 @@ export interface IUser extends Document {
   role: Role;
   plan: Plan;
   avatarUrl?: string;
-  savedSignatureUrl?: string; // sacuvan potpis (nacrtan) za ponovnu upotrebu na buducim ugovorima
+  savedSignatureUrl?: string;
   isActive: boolean;
+  emailVerified: boolean;
   onboardingCompleted: boolean;
   onboardingAnswers?: {
     platform?: string;
@@ -53,8 +54,8 @@ const userSchema = new Schema<IUser>(
     username: {
       type: String,
       unique: true,
-      sparse: true, // dozvoljava vise dokumenata bez username-a (dok ga ne postave kroz onboarding)
-      lowecase: true,
+      sparse: true,
+      lowercase: true,
       trim: true,
       minlength: 3,
       maxlength: 30,
@@ -62,7 +63,7 @@ const userSchema = new Schema<IUser>(
     passwordHash: {
       type: String,
       required: true,
-      select: false, // ne vraća se u query rezultatima osim ako se eksplicitno zatraži
+      select: false,
     },
     role: {
       type: String,
@@ -94,9 +95,13 @@ const userSchema = new Schema<IUser>(
       type: Boolean,
       default: true,
     },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
-    timestamps: true, // automatski dodaje createdAt i updatedAt
+    timestamps: true,
   },
 );
 

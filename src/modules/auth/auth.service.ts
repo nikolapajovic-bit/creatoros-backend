@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
 import { User, type IUser } from "@/modules/users/user.model";
 import { RefreshToken } from "@/modules/auth/refreshToken.model";
 import {
@@ -8,13 +9,14 @@ import {
 } from "@/utils/tokens";
 import { AppError } from "@/utils/AppError";
 import { env } from "@/config/env";
+import { sendVerificationEmail } from "@/services/email.service";
 import type { RegisterInput, LoginInput } from "@/modules/auth/auth.validation";
 
 const SALT_ROUNDS = 12;
 
 function parseExpiryToMs(expiresIn: string): number {
   const match = expiresIn.match(/^(\d+)([smhd])$/);
-  if (!match) return 7 * 24 * 60 * 60 * 1000; // fallback: 7 dana
+  if (!match) return 7 * 24 * 60 * 60 * 1000;
   const [, value, unit] = match;
   const multipliers: Record<string, number> = {
     s: 1000,
@@ -43,6 +45,28 @@ async function issueTokens(user: IUser) {
   return { accessToken, refreshToken };
 }
 
+function generateEmailVerificationToken(userId: string): string {
+  return jwt.sign(
+    { id: userId, purpose: "email_verify" },
+    env.JWT_ACCESS_SECRET,
+    {
+      expiresIn: "24h",
+    },
+  );
+}
+
+async function sendVerificationEmailToUser(user: IUser) {
+  const token = generateEmailVerificationToken(user._id.toString());
+  const verifyUrl = `${env.CLIENT_URL[0]}/verify-email?token=${token}`;
+  try {
+    await sendVerificationEmail(user.email, verifyUrl);
+  } catch (error) {
+    // Ne obaraj registraciju ako slanje email-a padne — korisnik i dalje može
+    // da koristi nalog, samo bez verifikacije za sada (može zatražiti ponovno slanje)
+    console.error("Failed to send verification email:", error);
+  }
+}
+
 export async function registerUser(
   input: RegisterInput,
   avatarFile?: Express.Multer.File,
@@ -61,6 +85,8 @@ export async function registerUser(
     role: input.role,
     avatarUrl: avatarFile ? avatarFile.path : undefined,
   });
+
+  await sendVerificationEmailToUser(user);
 
   const tokens = await issueTokens(user);
   return { user, ...tokens };
@@ -83,6 +109,46 @@ export async function loginUser(input: LoginInput) {
   return { user, ...tokens };
 }
 
+export async function verifyEmail(token: string) {
+  let payload: { id: string; purpose: string };
+  try {
+    payload = jwt.verify(token, env.JWT_ACCESS_SECRET) as {
+      id: string;
+      purpose: string;
+    };
+  } catch {
+    throw new AppError("Verification link is invalid or has expired", 400);
+  }
+
+  if (payload.purpose !== "email_verify") {
+    throw new AppError("Invalid verification token", 400);
+  }
+
+  const user = await User.findById(payload.id);
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  if (user.emailVerified) {
+    return user; // već verifikovan, tretiraj kao uspeh (idempotentno)
+  }
+
+  user.emailVerified = true;
+  await user.save();
+  return user;
+}
+
+export async function resendVerificationEmail(userId: string) {
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+  if (user.emailVerified) {
+    throw new AppError("Email is already verified", 400);
+  }
+  await sendVerificationEmailToUser(user);
+}
+
 export async function refreshTokens(oldToken: string) {
   const payload = verifyRefreshToken(oldToken).id
     ? verifyRefreshToken(oldToken)
@@ -100,7 +166,6 @@ export async function refreshTokens(oldToken: string) {
     throw new AppError("Refresh token not recognized or already used", 401);
   }
 
-  // Rotacija — stari token se odmah opoziva
   stored.revoked = true;
   await stored.save();
 
@@ -160,8 +225,6 @@ export async function changePassword(
   user.passwordHash = await bcrypt.hash(input.newPassword, SALT_ROUNDS);
   await user.save();
 
-  // Bezbednosna mera: opoziva SVE postojece refresh tokene kad se lozinka promeni
-  // (ako je nalog bio kompromitovan, ovo odseca napadaca sa svih drugih uredjaja)
   await RefreshToken.updateMany(
     { user: userId, revoked: false },
     { $set: { revoked: true } },

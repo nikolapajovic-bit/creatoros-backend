@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
 import { asyncHandler } from "@/utils/asyncHandler";
+import { AppError } from "@/utils/AppError";
+import { getSignedFileUrl } from "@/utils/cloudinaryAccess";
 import * as contractService from "@/modules/contracts/contract.service";
 import type {
   CreateContractInput,
@@ -129,5 +131,21 @@ export const withdrawContract = asyncHandler(
       req.user!.id,
     );
     res.status(200).json({ contract });
+  },
+);
+
+export const getSignedPdfUrl = asyncHandler(
+  async (req: Request, res: Response) => {
+    const contract = await contractService.getContractById(
+      getIdParam(req),
+      req.user!.id,
+    );
+
+    if (!contract.finalPdfPublicId) {
+      throw new AppError("Signed PDF not available yet", 404);
+    }
+
+    const url = getSignedFileUrl(contract.finalPdfPublicId, "raw", 300);
+    res.status(200).json({ url });
   },
 );

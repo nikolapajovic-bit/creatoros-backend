@@ -2,6 +2,7 @@ import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import { cloudinary } from "@/config/cloudinary";
+import { getSignedFileUrl } from "@/utils/cloudinaryAccess";
 import type { IContract } from "@/modules/contracts/contract.model";
 
 const LOGO_PATH = path.join(
@@ -42,12 +43,15 @@ function drawHeader(doc: PDFKit.PDFDocument) {
 }
 
 /**
- * Preuzima sliku sa udaljenog URL-a (Cloudinary) u memoriju kao Buffer —
- * pdfkit ume da ugradi Buffer direktno, ne treba fajl na disku.
+ * Preuzima sliku potpisa preko privremenog potpisanog linka (fajl je "authenticated",
+ * ne može se fetch-ovati direktno preko golog secure_url).
  */
-async function fetchImageBuffer(url: string): Promise<Buffer | null> {
+async function fetchSignatureImageBuffer(
+  publicId: string,
+): Promise<Buffer | null> {
   try {
-    const res = await fetch(url);
+    const signedUrl = getSignedFileUrl(publicId, "image", 120);
+    const res = await fetch(signedUrl);
     if (!res.ok) return null;
     const arrayBuffer = await res.arrayBuffer();
     return Buffer.from(arrayBuffer);
@@ -59,13 +63,13 @@ async function fetchImageBuffer(url: string): Promise<Buffer | null> {
 export async function generateSignedContractPdf(
   contract: IContract,
 ): Promise<string> {
-  // Unapred preuzmi slike potpisa (mrežni pozivi) PRE nego što počnemo da pišemo PDF —
-  // pdfkit piše sinhrono u stream, ne možemo da "pauziramo" usred pisanja da čekamo fetch
-  const creatorSigBuffer = contract.creatorSignature?.signatureImageUrl
-    ? await fetchImageBuffer(contract.creatorSignature.signatureImageUrl)
+  const creatorSigBuffer = contract.creatorSignature?.signaturePublicId
+    ? await fetchSignatureImageBuffer(
+        contract.creatorSignature.signaturePublicId,
+      )
     : null;
-  const brandSigBuffer = contract.brandSignature?.signatureImageUrl
-    ? await fetchImageBuffer(contract.brandSignature.signatureImageUrl)
+  const brandSigBuffer = contract.brandSignature?.signaturePublicId
+    ? await fetchSignatureImageBuffer(contract.brandSignature.signaturePublicId)
     : null;
 
   const pdfBuffer = await new Promise<Buffer>((resolve, reject) => {
@@ -75,7 +79,6 @@ export async function generateSignedContractPdf(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
-    // --- Header ---
     drawHeader(doc);
 
     doc
@@ -119,7 +122,6 @@ export async function generateSignedContractPdf(
       `Expiry date:  ${contract.expiryDate.toLocaleDateString("en-US")}`,
     );
 
-    // --- Strana 2: Certificate of Completion ---
     doc.addPage();
     drawHeader(doc);
     doc
@@ -182,8 +184,7 @@ export async function generateSignedContractPdf(
     doc.end();
   });
 
-  // Otpremi gotov PDF na Cloudinary (resource_type: "raw" jer PDF nije slika)
-  const uploadResult = await new Promise<{ secure_url: string }>(
+  const uploadResult = await new Promise<{ public_id: string }>(
     (resolve, reject) => {
       cloudinary.uploader
         .upload_stream(
@@ -192,6 +193,7 @@ export async function generateSignedContractPdf(
             public_id: `contract-${contract._id}-signed`,
             resource_type: "raw",
             format: "pdf",
+            type: "authenticated",
           },
           (error, result) => {
             if (error || !result) return reject(error);
@@ -202,5 +204,5 @@ export async function generateSignedContractPdf(
     },
   );
 
-  return uploadResult.secure_url;
+  return uploadResult.public_id;
 }

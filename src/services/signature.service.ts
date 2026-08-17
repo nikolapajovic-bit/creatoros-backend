@@ -20,6 +20,7 @@ export async function saveSignatureImage(
   const result = await cloudinary.uploader.upload(dataUrl, {
     folder: "creatoros/signatures",
     public_id: `signature-${ownerId}-${Date.now()}`,
+    type: "authenticated",
   });
 
   return { url: result.secure_url, publicId: result.public_id };
