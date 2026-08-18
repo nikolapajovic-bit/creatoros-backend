@@ -56,6 +56,14 @@ export async function createConversation(
       participants: { $all: participants, $size: 2 },
     });
     if (existing) {
+      // Ako je korisnik ranije "obrisao" ovaj razgovor kod sebe, klik na "start conversation"
+      // je jasna namera da ga vrati nazad u svoju listu
+      if (existing.hiddenFor.some((id) => id.toString() === userId)) {
+        existing.hiddenFor = existing.hiddenFor.filter(
+          (id) => id.toString() !== userId,
+        );
+        await existing.save();
+      }
       return existing;
     }
   }
@@ -116,7 +124,15 @@ export async function sendMessage(
 
   await Conversation.updateOne(
     { _id: conversationId },
-    { $set: { lastMessageAt: new Date(), hiddenFor: [] } },
+    {
+      $set: {
+        lastMessageAt: new Date(),
+        lastMessageText:
+          input.text.length > 80 ? `${input.text.slice(0, 80)}...` : input.text,
+        lastMessageSenderId: senderId,
+        hiddenFor: [],
+      },
+    },
   );
 
   const sender = await User.findById(senderId).select("name");

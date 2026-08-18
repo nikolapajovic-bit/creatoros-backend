@@ -36,11 +36,18 @@ export function registerMessageHandlers(io: SocketIOServer, socket: Socket) {
         text: payload.text,
       });
 
-      // Emituje svim klijentima u toj sobi (uključujući pošiljaoca — frontend prikazuje odmah)
-      io.to(`conversation:${payload.conversationId}`).emit(
-        "message:new",
-        message,
+      const conversation = await getConversationById(
+        payload.conversationId,
+        userId,
       );
+
+      // Emituje svim klijentima u toj sobi (uključujući pošiljaoca — frontend prikazuje odmah)
+      for (const participantId of conversation.participants) {
+        io.to(`conversation:${participantId.toString()}`).emit(
+          "message:new",
+          message,
+        );
+      }
     } catch {
       socket.emit("error", { message: "Failed to send message" });
     }

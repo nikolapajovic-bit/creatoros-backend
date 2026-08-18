@@ -9,6 +9,8 @@ export interface IConversation extends Document {
   name: string; // naziv brenda/tima (za sada tekstualan, ne relacija)
   type: ConversationType;
   lastMessageAt: Date;
+  lastMessageText?: string;
+  lastMessageSenderId?: Types.ObjectId;
   hiddenFor: Types.ObjectId[]; // korisnici koji su "obrisali" ovaj razgovor kod sebe
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +40,13 @@ const conversationSchema = new Schema<IConversation>(
       type: Date,
       default: Date.now,
       index: true,
+    },
+    lastMessageText: {
+      type: String,
+    },
+    lastMessageSenderId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
     },
     hiddenFor: [
       {
