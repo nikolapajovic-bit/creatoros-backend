@@ -31,6 +31,7 @@ export function registerMessageHandlers(io: SocketIOServer, socket: Socket) {
   });
 
   socket.on("message:send", async (payload: SendMessagePayload) => {
+    console.log("📩 Received message:send from", userId, payload);
     try {
       const message = await sendMessage(payload.conversationId, userId, {
         text: payload.text,
@@ -41,14 +42,16 @@ export function registerMessageHandlers(io: SocketIOServer, socket: Socket) {
         userId,
       );
 
-      // Emituje svim klijentima u toj sobi (uključujući pošiljaoca — frontend prikazuje odmah)
+      console.log(
+        "📨 Emitting message:new to:",
+        conversation.participants.map((p) => `user:${p.toString()}`),
+      );
+
       for (const participantId of conversation.participants) {
-        io.to(`conversation:${participantId.toString()}`).emit(
-          "message:new",
-          message,
-        );
+        io.to(`user:${participantId.toString()}`).emit("message:new", message);
       }
-    } catch {
+    } catch (err) {
+      console.error("💥 message:send failed:", err);
       socket.emit("error", { message: "Failed to send message" });
     }
   });
