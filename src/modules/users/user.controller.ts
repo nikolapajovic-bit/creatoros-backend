@@ -14,7 +14,7 @@ export const findUserByEmail = asyncHandler(
 
     const user = await User.findOne({
       email: email.toLowerCase().trim(),
-    }).select("name email role");
+    }).select("name email role avatarUrl");
     if (!user) {
       throw new AppError("No user found with that email", 404);
     }
@@ -25,6 +25,7 @@ export const findUserByEmail = asyncHandler(
         name: user.name,
         email: user.email,
         role: user.role,
+        avatarUrl: user.avatarUrl,
       },
     });
   },

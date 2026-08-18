@@ -16,7 +16,7 @@ export async function getConversationsForUser(userId: string) {
     .sort({
       lastMessageAt: -1,
     })
-    .populate("participants", "name email");
+    .populate("participants", "name email avatarUrl");
 }
 
 export async function getConversationById(id: string, userId: string) {
